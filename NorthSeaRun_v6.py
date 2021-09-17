@@ -2,10 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Oct 30 10:24:34 2020
-log:
-    v4: added tides from Sterl et al. (2019)
-    v5: Tides, Euler forward
-    v6: sample variables (dot products etc.) in coastal cells. Delete particles at integer days
+Script to run the OceanParcels simulations used to create the beaching fluxes used.
+Can be run from the command line with an argument -source, which can be f/r/p specifying the source of virtual particles
+(fisheries,rivers,coastal population respectively)
 @author: kaandorp
 """
 from parcels import FieldSet, ParticleSet, JITParticle, AdvectionRK4, Variable, Field, VectorField
@@ -609,27 +608,6 @@ def read_xarray_files(files):
     
     return df_out
 
-def split_xarray_dataset(file):
-    # file = os.path.join(inputDir , 'CMEMS/NorthWestShelf/MULTIYEAR_PHY_004_009/cmems_mod_nws_phy-uv_my_7km-3D_P1D-m_20112012.nc')
-    years = np.arange(2011,2020)
-    
-    for year_ in years:
-        file = os.path.join(inputDir , 'CMEMS/Waves_NorthSea/GLOBAL_REANALYSIS_WAV_001_032_%4.4i0101.nc'%year_)
-        df = xr.open_dataset(file)
-        
-        date_start = datetime(year_,1,1,0,0,0)
-        date_end = datetime(year_+1,1,1,0,0,0)
-        date_array = pd.date_range(date_start,date_end,freq='MS')
-        
-        for i1 in range(len(date_array)-1):
-            date_0 = date_array[i1]
-            date_1 = date_array[i1+1]
-            df_select = df.where((df['time'] >= date_0) & (df['time'] < date_1),drop=True)
-            df_select = df_select.drop_vars(['VPED','VHM0_WW','VMDR_WW','VMDR','VSDX','VSDY'])
-            outfile = os.path.join(inputDir , 'CMEMS/GLOBAL_REANALYSIS_WAV_001_032_NWSHELF_VHM0/%4.4i%2.2i.nc' % (date_0.year,date_0.month) )
-            # outfile = os.path.join(inputDir , 'CMEMS/NWSHELF_MULTIYEAR_PHY_004_009/%4.4i%2.2i.nc' % (date_0.year,date_0.month) )
-            df_select.to_netcdf(outfile)
-
 
 def get_true_landMask(landMask,i_top = 364,i_bot = 10,i_left = 10,i_right = 269):
     true_landMask = landMask.copy()
@@ -638,6 +616,7 @@ def get_true_landMask(landMask,i_top = 364,i_bot = 10,i_left = 10,i_right = 269)
     true_landMask[:,:i_left] = False
     true_landMask[:,i_right+1:] = False
     return true_landMask    
+
 
 def calculateLandCurrent(landMask,fieldMesh_x,fieldMesh_y,i_top = 364,i_bot = 10,
                          i_left = 10,i_right = 269,do_plot=False,outfile_1='./tmp_landcurrentx',outfile_2='./tmp_landcurrenty'):
@@ -1051,7 +1030,6 @@ def BoundaryCondition(particle, fieldset, time):
 
 def Ageing(particle, fieldset, time):
     
-    # coastalZone_p = fieldset.coastalZone[time, particle.depth, particle.lat, particle.lon] 
     landZone_p = fieldset.landZone[time, particle.depth, particle.lat, particle.lon] 
     
     if (landZone_p > fieldset.landzone_threshold):
@@ -1139,13 +1117,9 @@ if __name__=="__main__":
     particles_per_day = args.ppday
     projectFolder = args.outfolder
     
-    # day_start = datetime(2013,1,1,12,0)
-    # day_end = datetime(2013,6,1,12,00) 
     parcels_dt = 20 #minutes          
     day_start = datetime(2011,1,1,12,0)
     day_end = datetime(2019,9,30,12,00) 
-    # day_end = datetime(2011,1,6,12,00) #reanalysis end
-    # day_end = datetime(2011,3,1,12,00)
 
     date_now = datetime.now()
     output_file = 'particlefile_%s_%4.4i%2.2i%2.2i.nc' % (source,date_now.year,date_now.month,date_now.day)
@@ -1153,7 +1127,6 @@ if __name__=="__main__":
     
     if os.environ['USER'] == 'kaandorp': # desktop
         inputDir = os.path.join(os.environ['HOME'],'Data')
-        # homeDir = os.environ['HOME']
         outDir = os.path.join(os.getcwd(), projectFolder)
     elif os.environ['USER'] == 'kaand004': #gemini
         # homeDir = '/scratch/kaand004'
@@ -1168,9 +1141,6 @@ if __name__=="__main__":
         os.makedirs(outDir)
         print('Creating folder %s for output files\n' % outDir)
     
-    
-    # files_analysis = sorted(glob.glob(os.path.join(homeDir , 'Data/CMEMS/NorthWestShelf/DailyMean/NORTHWESTSHELF_ANALYSIS*')))
-    # files_reanalysis = sorted(glob.glob(os.path.join(homeDir , 'Data/CMEMS/NorthWestShelf/MULTIYEAR_PHY_004_009/cmems_mod_nws_phy-uv_my_7km-3D_P1D-m_20122019.nc')))
     files_reanalysis = sorted(glob.glob(os.path.join(inputDir , 'CMEMS/NWSHELF_MULTIYEAR_PHY_004_009/*')))
     
     file_0 = xr.open_dataset(files_reanalysis[0])
@@ -1185,9 +1155,6 @@ if __name__=="__main__":
                   'time': 'time'}
     
     fieldset_re = FieldSet.from_netcdf(filenames_re, variables_re, dimensions_re)
-    # fieldset_re = FieldSet.from_xarray_dataset(dataset_re, variables_re, dimensions_re,chunksize='auto')
-    # fieldset_re = FieldSet.from_xarray_dataset(dataset_re, variables_re, dimensions_re,chunksize=(30,1,375,297))
-    
     
     lons = fieldset_re.U.lon
     lats = fieldset_re.U.lat
@@ -1453,11 +1420,6 @@ if __name__=="__main__":
     
     #%%
     
-    #TODO: can be used for illustration, particles_t starting at 2011,1,1
-    # particles_lon = np.array([4.9]) # particles_lon[0]
-    # particles_lat = np.array([53.46]) # particles_lat[0]
-    # particles_t = particles_t[0]
-   
     n_days_re = (day_end - day_start).days
     
     pset1 = ParticleSet.from_list(fieldset_re, PlasticParticle, particles_lon,
@@ -1494,9 +1456,8 @@ if __name__=="__main__":
     
     
     #%%
-    # sleep(60*60)
+
     data_traj = xr.open_dataset(output_filename)
-    
     
     landMask_plot = get_true_landMask(landMask)
     dlon = lons[1]-lons[0]
@@ -1514,13 +1475,3 @@ if __name__=="__main__":
     for i in range(min(50,len(data_traj['traj']))):
         i1 = np.random.randint(0,data_traj['lon'].shape[0])
         ax.plot(data_traj['lon'][i1,:],data_traj['lat'][i1,:],'o-',transform=ccrs.PlateCarree())
-
-# ax.coastlines(resolution='10m',color='grey')
-# ax.add_feature(cartopy.feature.LAND, zorder=0,edgecolor='black')
-
-
-# plt.figure()
-# plt.pcolormesh(meshPlotx,meshPloty,np.mean(file_0['uo'][:,0,:,:],axis=0)>0)
-
-# plt.figure()
-# plt.pcolormesh(np.mean(file_0['uo'][:,0,:,:],axis=0)>0)
