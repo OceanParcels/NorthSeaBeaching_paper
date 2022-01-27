@@ -36,6 +36,8 @@ import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
+colors_tableau = ['#006BA4', '#FF800E', '#ABABAB', '#595959',
+                 '#5F9ED1', '#C85200', '#898989', '#A2C8EC', '#FFBC79', '#CFCFCF']
 
 def find_closest_date(arr,date):
     diff = np.array([arr[i]-date for i in range(len(arr))])
@@ -557,7 +559,7 @@ lat_unique = lat_unique[i_sort]
 
 #%% import the calculated coastline properties (see calculate_coast_mesh_properties.py and calculate_coastal_orientations.py)
 
-data_coastal_length = xr.open_dataset('/Users/kaandorp/Git_repositories/NorthSeaBeaching/datafiles/netcdf_coastal_lengths.nc')
+data_coastal_length = xr.open_dataset('datafiles/netcdf_coastal_lengths.nc')
 X_coast, Y_coast = np.meshgrid(data_coastal_length['lon'],data_coastal_length['lat'])
 currents_landmask = np.loadtxt('datafiles/datafile_trueLandMask_297x_375y').astype(bool)
 
@@ -575,7 +577,7 @@ ax.set_extent((3.2,6.8,51,53.7))
 ax.coastlines(resolution='10m')
 
 
-data_coastal_orientations = xr.open_dataset('/Users/kaandorp/Git_repositories/NorthSeaBeaching/datafiles/netcdf_coastal_orientations.nc')
+data_coastal_orientations = xr.open_dataset('datafiles/netcdf_coastal_orientations.nc')
 
 array_dot_mesh_coast = []
 for i1,yr in enumerate(data_BBCT):
@@ -603,138 +605,26 @@ array_dot_mesh_coast = np.array(array_dot_mesh_coast)
 data_land_sea = xr.open_dataset('/Users/kaandorp/Data/ERA5/Wind_NorthSea_old/land_sea_mask.nc')
 mask_land_sea = data_land_sea['lsm'].data[0,:,:]
 
-data_beaching_f = xr.open_dataset('/Users/kaandorp/Git_repositories/NorthSeaBeaching/histograms/beaching_hist_0405_f.nc')
-data_beaching_p = xr.open_dataset('/Users/kaandorp/Git_repositories/NorthSeaBeaching/histograms/beaching_hist_0405_p.nc')
-data_beaching_r = xr.open_dataset('/Users/kaandorp/Git_repositories/NorthSeaBeaching/histograms/beaching_hist_0405_r.nc')
+data_beaching_f = xr.open_dataset('histograms/beaching_hist_11_f.nc')
+data_beaching_p = xr.open_dataset('histograms/beaching_hist_11_p.nc')
+data_beaching_r = xr.open_dataset('histograms/beaching_hist_11_r.nc')
 
 X_beaching,Y_beaching = np.meshgrid(data_beaching_f['lon'].data,data_beaching_f['lat'].data)
 
-data_popden = xr.open_dataset('/Users/kaandorp/Git_repositories/NorthSeaBeaching/datafiles/netcdf_popdensity.nc')
+data_popden = xr.open_dataset('datafiles/netcdf_popdensity.nc')
 X_pop, Y_pop = np.meshgrid(data_popden['lon'],data_popden['lat'])
 land_mask_pop = ~np.isnan(data_popden['popdensity'][0,:,:].data)
 
-
-
-#-----------tides------------
-tides_folder = '/Users/kaandorp/Data/FES2014Data/ocean_tide/'
-file_K1 = os.path.join(tides_folder,'conv_k1.nc')
-file_M2 = os.path.join(tides_folder,'conv_m2.nc')
-file_O1 = os.path.join(tides_folder,'conv_o1.nc')
-file_S2 = os.path.join(tides_folder,'conv_s2.nc')
-
-data_K1 = xr.open_dataset(file_K1)
-data_M2 = xr.open_dataset(file_M2)
-data_O1 = xr.open_dataset(file_O1)
-data_S2 = xr.open_dataset(file_S2)
-
-
-def initialize_tides(year):
-    print('Calculating tides for %i' % year)
-    lons = data_K1['lon']
-    lats = data_K1['lat']
-    
-    
-    i_lon_min = np.where(lons >= 2 )[0][0]
-    i_lon_max = np.where(lons <= 7 )[0][-1]
-    i_lat_min = np.where(lats >= 50 )[0][0]
-    i_lat_max = np.where(lats <= 54 )[0][-1]
-
-    X_tides,Y_tides = np.meshgrid(lons[i_lon_min:i_lon_max],lats[i_lat_min:i_lat_max])
-
-    day_start = datetime(year,7,1,00)
-    day_end = datetime(year,9,1,00)
-
-    time_array = pd.date_range(day_start,day_end,freq='H')
-    
-    t0 = datetime(1900,1,1,0,0) # origin of time = 1 January 1900, 00:00:00 UTC
-    t0rel =  (day_start - t0).total_seconds() # number of seconds elapsed between t0 and starttime
-    deg2rad = math.pi/180.0 # factor to convert degrees to radians
-    
-    omega_M2 = (28.9841042 * deg2rad) / 3600.0 # angular frequency of M2 in radians per second
-    omega_S2 = (30.0000000 * deg2rad) / 3600.0 # angular frequency of S2 in radians per second
-    omega_K1 = (15.0410686 * deg2rad) / 3600.0 # angular frequency of K1 in radians per second
-    omega_O1 = (13.9430356 * deg2rad) / 3600.0 # angular frequency of O1 in radians per second
-    
-    # Define constants to compute astronomical variables T, h, s, N (all in degrees) (source: FES2014 code)
-    cT0 = 180.0
-    ch0 = 280.1895
-    cs0 = 277.0248
-    cN0 = 259.1568; cN1 = -1934.1420
-    deg2rad = math.pi/180.0
-    
-    # Calculation of factors T, h, s at t0 (source: Doodson (1921))
-    T0 = math.fmod(cT0, 360.0) * deg2rad
-    h0 = math.fmod(ch0, 360.0) * deg2rad
-    s0 = math.fmod(cs0, 360.0) * deg2rad
-    
-    # Calculation of V(t0) (source: Schureman (1958))
-    V_M2 = 2*T0 + 2*h0 - 2*s0
-    V_S2 = 2*T0
-    V_K1 = T0 + h0 - 0.5*math.pi
-    V_O1 = T0 + h0 - 2*s0 + 0.5*math.pi
-
-    tide_land_mask = np.isnan(data_K1['phase'])[i_lat_min:i_lat_max,i_lon_min:i_lon_max]
-    tide_array = np.zeros([len(time_array),len(lats[i_lat_min:i_lat_max]),len(lons[i_lon_min:i_lon_max])])
-    
-    for i1,date in enumerate(time_array):
-        
-        time = (date - day_start).total_seconds()
-        # time = (date - t0).total_seconds() #dont use
-        
-        t = ((time + t0rel)/86400.0)/36525.0
-        
-        # Calculation of factors N, I, nu, xi at time (source: Schureman (1958))
-        # Since these factors change only very slowly over time, we take them as constant over the time step dt
-        N = math.fmod(cN0 + cN1*t, 360.0) * deg2rad
-        I = math.acos(0.91370 - 0.03569*math.cos(N))
-        tanN = math.tan(0.5*N)
-        at1 = math.atan(1.01883 * tanN)
-        at2 = math.atan(0.64412 * tanN)
-        nu = at1 - at2
-        xi = -at1 - at2 + N
-        nuprim = math.atan(math.sin(2*I) * math.sin(nu)/(math.sin(2*I)*math.cos(nu) + 0.3347))
-        
-        # Calculation of u, f at current time (source: Schureman (1958))
-        u_M2 = 2*xi - 2*nu
-        f_M2 = (math.cos(0.5*I))**4/0.9154
-        u_S2 = 0
-        f_S2 = 1
-        u_K1 = -nuprim
-        f_K1 = math.sqrt(0.8965*(math.sin(2*I))**2 + 0.6001*math.sin(2*I)*math.cos(nu) + 0.1006)
-        u_O1 = 2*xi - nu
-        f_O1 = math.sin(I)*(math.cos(0.5*I))**2/0.3800
-        
-        
-        ampl_K1 = f_K1 * data_K1['amplitude'][i_lat_min:i_lat_max,i_lon_min:i_lon_max] *1e-2
-        pha_K1 = V_K1 + u_K1 - data_K1['phase'][i_lat_min:i_lat_max,i_lon_min:i_lon_max] * deg2rad
-        tide_K1 = ampl_K1 * np.cos(omega_K1 * (time+t0rel) + pha_K1)
-        
-        ampl_M2 = f_M2 * data_M2['amplitude'][i_lat_min:i_lat_max,i_lon_min:i_lon_max] *1e-2
-        pha_M2 = V_M2 + u_M2 - data_M2['phase'][i_lat_min:i_lat_max,i_lon_min:i_lon_max] * deg2rad
-        tide_M2 = ampl_M2 * np.cos(omega_M2 * (time+t0rel) + pha_M2)
-        
-        ampl_O1 = f_O1 * data_O1['amplitude'][i_lat_min:i_lat_max,i_lon_min:i_lon_max] *1e-2
-        pha_O1 = V_O1 + u_O1 - data_O1['phase'][i_lat_min:i_lat_max,i_lon_min:i_lon_max] * deg2rad
-        tide_O1 = ampl_O1 * np.cos(omega_O1 * (time+t0rel) + pha_O1)
-        
-        ampl_S2 = f_S2 * data_S2['amplitude'][i_lat_min:i_lat_max,i_lon_min:i_lon_max] *1e-2
-        pha_S2 = V_S2 + u_S2 - data_S2['phase'][i_lat_min:i_lat_max,i_lon_min:i_lon_max] * deg2rad
-        tide_S2 = ampl_S2 * np.cos(omega_S2 * (time+t0rel) + pha_S2)
-        
-        tide_tot = tide_K1 + tide_M2 + tide_O1 + tide_S2
-        tide_array[i1,:,:] = tide_tot
-        
-    ds = xr.Dataset(
-        {"tide": (("time", "lat", "lon"), tide_array ),
-         "explanation": 'tides calculated from FES dataset'},
-        coords={
-            "lon": lons[i_lon_min:i_lon_max],
-            "lat": lats[i_lat_min:i_lat_max],
-            "time": time_array,
-        },
-    )   
-   
-    return ds, X_tides, Y_tides, tide_land_mask
+#create dummy xr dataset for the fishing density
+data_fish_ = np.loadtxt('datafiles/datafile_fishingInputMatrices_297x_375y')
+data_fish = xr.Dataset(
+                {"fishing_density": (("lat", "lon"), data_fish_ ),
+                 "explanation": 'fishing density'},
+                coords={
+                    "lat": np.arange(data_fish_.shape[0]),
+                    "lon": np.arange(data_fish_.shape[1]),
+                },
+            )     
 
 
 distances_select = [0,20,50,100]
@@ -744,14 +634,14 @@ vars_names = ['VHM0_mean','VHM0_max','mag_Stokes_mean','mag_Stokes_max','mag_win
                   'mag_wind_max','in_Stokes_mean','in_Stokes_max','in_Stokes_min','in_wind_mean','in_wind_max','in_wind_min',
                   'in_currents_mean','in_currents_max','in_currents_min',
                   'beaching_f_tau25','beaching_p_tau25','beaching_r_tau25','beaching_f_tau75','beaching_p_tau75','beaching_r_tau75',
-                  'beaching_f_tau150','beaching_p_tau150','beaching_r_tau150']
+                  'beaching_f_tau150','beaching_p_tau150','beaching_r_tau150','sal_mean','sal_min']
 
 #variables with lead times only
-vars_names2 = ['temp_mean','temp_max','tide_max','tide_std','tide_derivative']
+vars_names2 = ['tide_max','tide_std','tide_derivative','mag_tide_max','mag_tide_std','in_tide_mean','in_tide_max','in_tide_min']
 
 #variables with radii only
 distances_select2 = [0,20,50,100]
-vars_names3 = ['pop_density','coastal_length']
+vars_names3 = ['pop_density','coastal_length','fish_density']
 
 #'instantaneous' variables (conditions during the tour of 6 hours)
 vars_names4 = ['tide_tour_max','tide_tour_min']
@@ -783,16 +673,23 @@ for i1,yr in enumerate(data_BBCT):
 
     data_waves = xr.load_dataset('/Users/kaandorp/Data/CMEMS/Waves_NorthSea/GLOBAL_REANALYSIS_WAV_001_032_%4i0101.nc' % yr)
     data_wind = xr.load_dataset('/Users/kaandorp/Data/ERA5/Wind_NorthSea_old/wind_%4i_065--020-040-013.nc' % yr)
-    data_temp = xr.load_dataset('/Users/kaandorp/Data/ERA5/Temp_NorthSea/temp_%4i_054-003-051-006.nc' % yr)
+    # data_temp = xr.load_dataset('/Users/kaandorp/Data/ERA5/Temp_NorthSea/temp_%4i_054-003-051-006.nc' % yr)
     data_currents = load_data_currents(yr)
+    data_tides = xr.load_dataset('datafiles/tides_%4i.nc' % yr)
+    data_sal = xr.load_dataset('/Users/kaandorp/Data/CMEMS/NWSHELF_MULTIYEAR_PHY_004_009_salinity/%4i0701.nc' % yr)
+    data_sal = data_sal.squeeze('depth')
     
     X_waves,Y_waves = np.meshgrid(data_waves['longitude'].data,data_waves['latitude'].data)
     waves_land_mask = np.all( np.isnan( data_waves['VHM0'][:,:,:]), axis=0).data
     X_wind,Y_wind = np.meshgrid(data_wind['longitude'].data,data_wind['latitude'].data)
-    X_temp,Y_temp = np.meshgrid(data_temp['longitude'].data,data_temp['latitude'].data)
+    # X_temp,Y_temp = np.meshgrid(data_temp['longitude'].data,data_temp['latitude'].data)
     X_curr,Y_curr = np.meshgrid(data_currents['longitude'].data,data_currents['latitude'].data)
+    X_tides,Y_tides = np.meshgrid(data_tides['lon'].data,data_tides['lat'].data)
+    tides_land_mask = data_tides['mask_land'].values
+    X_sal, Y_sal = np.meshgrid(data_sal['longitude'].data,data_sal['latitude'].data)
+    sal_land_mask = np.all(np.isnan(data_sal['so'][:,:,:]),axis=0).values
     
-    data_tides,X_tides,Y_tides,tides_land_mask = initialize_tides(yr)
+    # data_tides,X_tides,Y_tides,tides_land_mask = initialize_tides(yr)
     
     # dist_select = 50 #km
     # time_lag = 1 #days
@@ -804,7 +701,7 @@ for i1,yr in enumerate(data_BBCT):
             participants_ = np.nan
         
         if date_.hour == 0:
-            date_ = date_ + timedelta(hours=11) #assume noon
+            date_ = date_ + timedelta(hours=10) #start at 10:00
         calculated_variables = [lon_,lat_,date_,kg_/km_]
 
         # variables with radii and lead times
@@ -857,34 +754,49 @@ for i1,yr in enumerate(data_BBCT):
                 beaching_r_tau150 = calculate_variables(lon_,lat_,date_,data_beaching_r,
                                                              dist_select,time_lag,'beaching_tau150',X_beaching,Y_beaching,quantity='sum')
                 
+                sal_mean, _, sal_min, _ = calculate_variables(lon_,lat_,date_,data_sal,
+                                                                     dist_select,time_lag,'so',X_sal,Y_sal,quantity='all',
+                                                                     use_land_mask=True,land_mask=sal_land_mask)
+                
                 print(date_,in_wind_mean,in_wind_min,in_Stokes_mean,in_Stokes_min,dist_select,time_lag)
                 
                 calculated_variables.extend([VHM0_mean,VHM0_max,mag_Stokes_mean,mag_Stokes_max,mag_wind_mean,
                   mag_wind_max,in_Stokes_mean,in_Stokes_max,in_Stokes_min,in_wind_mean,in_wind_max,in_wind_min,
                   in_currents_mean,in_currents_max,in_currents_min,
                   beaching_f_tau25,beaching_p_tau25,beaching_r_tau25,beaching_f_tau75,beaching_p_tau75,beaching_r_tau75,
-                  beaching_f_tau150,beaching_p_tau150,beaching_r_tau150])
+                  beaching_f_tau150,beaching_p_tau150,beaching_r_tau150,sal_mean,sal_min])
 
         # variables with lead times only (temp and tides)
-        print('Calculating temp and tides')
+        print('Calculating tides')
         for time_lag in times_lag:
-            temp_mean, temp_max, _, _ = calculate_variables(lon_, lat_, date_, data_temp, 0, time_lag, 't2m', X_temp, Y_temp, quantity='all')
+            # temp_mean, temp_max, _, _ = calculate_variables(lon_, lat_, date_, data_temp, 0, time_lag, 't2m', X_temp, Y_temp, quantity='all')
             
             _, tide_max, _, tide_std = calculate_variables(lon_, lat_, date_, data_tides, 0, time_lag, 'tide', X_tides, Y_tides, quantity='all',use_land_mask=True,land_mask=tides_land_mask)
             
             tide_derivative = calculate_tide_derivative(lon_, lat_, date_, data_tides, 0, time_lag, 'tide', X_tides, Y_tides, use_land_mask=True, land_mask=tides_land_mask)
             
-            calculated_variables.extend([temp_mean,temp_max,tide_max,tide_std,tide_derivative])
+            _, mag_tide_max, _, mag_tide_std = calculate_variables(lon_,lat_,date_,data_tides,
+                                                     0,time_lag,['tide_U','tide_V'],X_tides,Y_tides,quantity='all',
+                                                     use_land_mask=True,land_mask=tides_land_mask)
+            
+            in_tide_mean, in_tide_max, in_tide_min = calculate_inproduct(lon_,lat_,date_,data_tides,
+                                                                             0,time_lag,['tide_U','tide_V'],X_tides,Y_tides,quantity='all',
+                                                                             use_land_mask=True,land_mask=tides_land_mask)
+                             
+            
+            calculated_variables.extend([tide_max,tide_std,tide_derivative,mag_tide_max,mag_tide_std,in_tide_mean,in_tide_max,in_tide_min])
 
             
-        # variables with radii only (MPW density, coastal lengths)
-        print('Calculating population density, coastal lengths')
+        # variables with radii only (MPW density, coastal lengths, fishing density)
+        print('Calculating population density, coastal lengths, fishing density')
         for dist_select in distances_select2:
             pop_density = calculate_variables(lon_, lat_, date_, data_popden, dist_select, 0, 'popdensity', X_pop, Y_pop, quantity='mean',use_land_mask=True,land_mask=~land_mask_pop)
             
             coastal_length = calculate_variables(lon_, lat_, date_, data_coastal_length, dist_select, 0, 'coastline_length', X_coast, Y_coast, quantity='sum',use_land_mask=False)
 
-            calculated_variables.extend([pop_density,coastal_length])
+            fishing_density = calculate_variables(lon_, lat_, date_, data_fish, dist_select, 0, 'fishing_density', X_curr, Y_curr, quantity='mean',use_land_mask=True,land_mask=currents_landmask)
+            
+            calculated_variables.extend([pop_density,coastal_length,fishing_density])
             
             
         print('Calculating tides along tour')
@@ -1066,13 +978,15 @@ def impute_participant_numbers(regression_table_):
             
 
 
-filename = 'pickle_files/regression_table_180_420_20210610.pickle'
+filename = 'pickle_files/regression_table_180_468_20211213.pickle'
 
 with open(filename, 'rb') as f:
     regression_table = pickle.load(f)
 
 regression_table_ = regression_table.dropna(axis=0,how='any',subset=['kg/m']).copy()
 regression_table_ = normalize_beaching_variables(regression_table_)
+
+output_table = pd.DataFrame(regression_table_.iloc[:,0:4])
 
 impute_participant_numbers(regression_table_)
 
@@ -1085,7 +999,7 @@ use_scaling = True
 use_PCA = False
 
 if regressor == 'RFR':
-    reg1 = RandomForestRegressor(oob_score=True,max_features=.33)
+    reg1 = RandomForestRegressor(oob_score=True,max_features=.33,min_samples_leaf=1)
 elif regressor == 'LR':
     reg1 = linear_model.LinearRegression()
 elif regressor == 'GLM':
@@ -1095,7 +1009,8 @@ elif regressor == 'GPR':
     reg1 = GaussianProcessRegressor()    
 
 # variables to exclude as features, such as lon/lat, tidal derivatives for longer timescales
-exclude_strings = ['lon','lat','time','kg/m','pop_density','temp','_020_','derivative_009','derivative_030']
+# exclude_strings = ['lon','lat','time','kg/m','pop_density','temp','_020','derivative_009','derivative_030']
+exclude_strings = ['lon','lat','time','kg/m','temp','_020','derivative_009','derivative_030']
 
 exclude = np.array([],dtype=int)
 for i1,feat_ in enumerate(regression_table_.keys()):
@@ -1125,6 +1040,11 @@ y_pred_tot = np.array([])
 
 c = 0
 array_pearsonR = []
+
+data_fig1 = {}
+data_fig1['y_test'] = {}
+data_fig1['y_pred'] = {}
+data_fig1['R_test'] = {}
 
 for i_outer in range(n_repeat):
     
@@ -1228,7 +1148,14 @@ for i_outer in range(n_repeat):
         best_feature_in_cluster_mat[c,:] = selected_features
         
         if i_outer == n_repeat-1:
-            plt.plot(y_test,y_pred_test,'o',label='test fold %i, R: %f' %(i1,pearsonR))
+            plt.plot(y_test,y_pred_test,'o',label='test fold %i, R: %2.2f' %(i1,pearsonR))
+        
+            data_fig1['y_test'][i1] = y_test
+            data_fig1['y_pred'][i1] = y_pred_test
+            data_fig1['R_test'][i1] = pearsonR 
+            
+            output_table.loc[y_test.index,'y_test'] = y_test
+            output_table.loc[y_test.index,'y_pred'] = y_pred_test
         
         print(i1)
         c+=1
@@ -1246,8 +1173,8 @@ for i_outer in range(n_repeat):
     
 tot_pearsonR = pearsonr(y_test_tot,y_pred_tot)[0]
 array_pearsonR = np.array(array_pearsonR)
-plt.xlabel('True value [log10(kg/km)]')
-plt.ylabel('Predicted value [log10(kg/km)]')
+plt.xlabel(r'Observed value [log$_{10}$(kg km$^{-1}$)]',fontsize=13)
+plt.ylabel(r'Predicted value [log$_{10}$(kg km$^{-1}$)]',fontsize=13)
 plt.axis('equal')
 plt.plot([0,1.1*y.max()],[0,1.1*y.max()],'k--',label='1:1')
 PLOT_STD = True
@@ -1274,9 +1201,87 @@ if PLOT_STD:
     print('Fraction of values within error bounds: %f' % n_within)
 
 plt.legend()   
-plt.title('Pearson R: %f +- %f' % (array_pearsonR.mean(),array_pearsonR.std())) 
+plt.title('Pearson R: %2.2f +- %2.2f' % (array_pearsonR.mean(),array_pearsonR.std())) 
+fig.subplots_adjust(left=0.17)
 
 print('R +- sigma: %f, %f' % (array_pearsonR.mean(),array_pearsonR.std()))
+
+data_fig1['array_pearsonR'] = array_pearsonR
+
+SAVE = False
+if SAVE:
+    now_ = datetime.now()
+    filename_fig = 'fig1_%i_%4.4i%2.2i%2.2i%2.2i%2.2i.pickle' % (n_vars,now_.year,now_.month,now_.day,now_.hour,now_.minute)
+    outfile = open('01_figure_data/' + filename_fig,'wb')
+    pickle.dump(data_fig1,outfile)
+    outfile.close()  
+
+    output_table.to_csv('datafiles/output_predictions_test.csv')
+
+
+#%% Train and save the final model
+from joblib import dump, load
+
+selected_features_total = calculate_most_common_feature(best_feature_in_cluster_mat)
+i_sort_feat_imp_total = np.argsort(np.abs(feature_importance_score_mat.mean(axis=0)))
+
+print('Total: most important features: ', x.keys()[selected_features_total][i_sort_feat_imp_total][-10:])
+features_imp_to_least_total = x.keys()[selected_features_total][i_sort_feat_imp_total][-10:][::-1]
+for i2,feat_ in enumerate(features_imp_to_least_total):
+    print('%i. %s' % (i2+1,feat_))
+
+scaler = StandardScaler()
+scaler.fit(x)
+
+final_model = reg1.fit(scaler.transform(x)[:,selected_features_total],y)
+SAVE = True
+LOAD = False
+if SAVE:
+    now_ = datetime.now()
+    filename_model = 'pickle_files/%s_%4.4i%2.2i%2.2i%2.2i.joblib' % (regressor,now_.year,now_.month,now_.day,now_.hour)
+    dump(final_model, filename_model) 
+if LOAD:
+    final_model = load('pickle_files/RFR_2021121318.joblib') 
+
+#%% save data for fig2
+data_fig2 = {}
+data_fig2['feature_importance_score_mat'] = feature_importance_score_mat[:,i_sort_feat_imp_total]
+data_fig2['labels'] = x.keys()[selected_features_total][i_sort_feat_imp_total]
+
+now_ = datetime.now()
+filename_fig = 'fig2_%i_%4.4i%2.2i%2.2i%2.2i%2.2i.pickle' % (n_vars,now_.year,now_.month,now_.day,now_.hour,now_.minute)
+outfile = open('01_figure_data/' + filename_fig,'wb')
+pickle.dump(data_fig2,outfile)
+outfile.close()  
+
+
+#%%
+#res_Lag_14dec
+['mag_wind_max_100_009', 'in_Stokes_mean_000_001',
+       'in_currents_min_100_009', 'in_wind_mean_100_003', 'VHM0_mean_000_009',
+       'in_Stokes_max_000_003', 'in_Stokes_max_050_009',
+       'in_Stokes_min_100_030', 'in_Stokes_max_000_001', 'VHM0_mean_000_001',
+       'in_currents_min_050_001', 'in_Stokes_max_000_030', 'VHM0_max_000_030',
+       'mag_wind_max_100_001', 'mag_Stokes_max_100_003', 'VHM0_mean_000_030',
+       'in_currents_min_000_009', 'in_currents_min_050_009',
+       'VHM0_max_050_030', 'in_currents_max_000_009', 'mag_wind_max_050_030',
+       'mag_Stokes_max_000_009', 'fish_density_050', 'sal_min_100_003',
+       'pop_density_100', 'mag_Stokes_mean_000_003', 'in_currents_min_000_003',
+       'fish_density_100', 'in_Stokes_max_100_030', 'mag_Stokes_mean_000_001',
+       'in_Stokes_min_000_030', 'in_wind_min_000_001', 'sal_min_050_001',
+       'in_wind_mean_000_009', 'in_currents_mean_050_003', 'in_tide_mean_009',
+       'sal_min_000_030', 'tide_derivative_003', 'in_tide_mean_003',
+       'sal_mean_050_030', 'tide_tour_min', 'sal_mean_100_030',
+       'in_wind_min_100_003', 'VHM0_mean_050_030', 'beaching_r_tau25_050_030',
+       'mag_tide_max_001', 'in_Stokes_mean_100_030',
+       'in_currents_mean_050_030', 'in_currents_max_050_009',
+       'mag_tide_std_030', 'mag_wind_mean_000_003', 'coastal_length_000',
+       'pop_density_050', 'in_tide_mean_001', 'in_currents_max_100_003',
+       'in_Stokes_min_000_009', 'fish_density_000', 'in_currents_min_000_030',
+       'in_tide_max_003', 'beaching_p_tau150_050_030', 'tide_tour_max',
+       'dot_mesh_coast', 'coastal_length_050', 'beaching_f_tau25_050_009',
+       'tide_max_003', 'tide_std_030']
+
 
 
 #%% analyze the effect of the features
@@ -1316,29 +1321,54 @@ for i2,index_ in enumerate(indices):
 fig.subplots_adjust(hspace=.4,wspace=.4)
 
 
+#%%  Effect of the features with jitter
+indices = i_sort_feat_imp_total[::-1][0:12]
+n_col = int(3)
+n_row = int(np.ceil(len(indices)/n_col))
+fig,ax = plt.subplots(n_row,n_col,figsize=(12,15))
+
+for i2,index_ in enumerate(indices):
+    # index_ = 33
+    feature_ = x.keys()[selected_features_total][index_]
+    feature_syn_vals = np.sort(x[feature_]) # np.linspace(x[feature_].min(),x[feature_].max(),30)
+    
+    for i3 in range(30):
+        
+        x_table_syn = pd.DataFrame(columns=x.columns)
+        
+        for i1,feature_val_ in enumerate(feature_syn_vals):
+         
+            q_l = np.quantile(x,.4,axis=0)
+            q_h = np.quantile(x,.6,axis=0)
+            
+            vals_rnd = []
+            for i4 in range(len(q_l)):
+                vals_rnd.append(np.random.uniform(q_l[i4],q_h[i4]))
+                
+            x_table_syn.loc[i1] = np.array(vals_rnd) 
+            # x_table_syn.loc[i1] = x.iloc[:,selected_features_total].mean()
+            x_table_syn.loc[i1,feature_] = feature_val_
+        
+        
+        if use_scaling:
+            x_syn = scaler.transform(x_table_syn)
+        
+        x_syn = x_syn[:,selected_features_total]
+        
+        predictions = final_model.predict(x_syn)
+        
+        # fig,ax = plt.subplots(1)
+        i_row = int(i2 // n_col)
+        i_col = int(i2 % n_col)
+        ax[i_row,i_col].plot(feature_syn_vals,predictions,'-')
+        # ax[i_row,i_col].plot(feature_syn_vals,predictions,'kx',markersize=4)
+        ax[i_row,i_col].set_xlabel(feature_)
+        ax[i_row,i_col].set_ylabel('Prediction [log10(kg/km)]')
+        ax[i_row,i_col].set_title('Importance ranking: %i' % (i2+1))
+    fig.subplots_adjust(hspace=.4,wspace=.4)
+
 #%% Final model properties
 
-selected_features_total = calculate_most_common_feature(best_feature_in_cluster_mat)
-i_sort_feat_imp_total = np.argsort(np.abs(feature_importance_score_mat.mean(axis=0)))
-
-print('Total: most important features: ', x.keys()[selected_features_total][i_sort_feat_imp_total][-10:])
-features_imp_to_least_total = x.keys()[selected_features_total][i_sort_feat_imp_total][-10:][::-1]
-for i2,feat_ in enumerate(features_imp_to_least_total):
-    print('%i. %s' % (i2+1,feat_))
-
-scaler = StandardScaler()
-scaler.fit(x)
-
-final_model = reg1.fit(scaler.transform(x)[:,selected_features_total],y)
-SAVE = False
-LOAD = False
-if SAVE:
-    from joblib import dump, load
-    now_ = datetime.now()
-    filename_model = 'pickle_files/%s_%4.4i%2.2i%2.2i%2.2i.joblib' % (regressor,now_.year,now_.month,now_.day,now_.hour)
-    dump(final_model, filename_model) 
-if LOAD:
-    final_model = load('pickle_files/RFR_2021050617.joblib') 
 
 
 indices = i_sort_feat_imp_total[::-1][0:12]

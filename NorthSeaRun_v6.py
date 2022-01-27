@@ -113,7 +113,9 @@ def get_coastmask(landMask,i_top=np.inf,i_bot=-1,i_left=-1,i_right=np.inf,outfil
 
 
 def gridMPWData(fieldMesh_x,fieldMesh_y,landMask,outfile='./tmp_mpw_gridded'):
-
+    """
+    Read in data for the MPW per country, and convert this to gridded data (fieldmesh_x and _y)
+    """
     if os.path.exists(outfile):
         mpw_mat_final = np.loadtxt(outfile)
     else:    
@@ -682,6 +684,7 @@ def coastalDynamics(particle, fieldset, time):
     Kernel which calculates in-products and magnitudes of weather variables.
     For the in-product, we take the maximum on the rectangular grid 
     (i.e. we look at all neighboring cellsif they are land, and then take the max)
+    This kernel was not used in the end for the analysis
     '''
     lon_spacing_ = fieldset.lon_spacing
     lat_spacing_ = fieldset.lat_spacing
@@ -981,6 +984,10 @@ def SamplePerDay(particle, fieldset, time):
     particle.day_mod_previous = day_mod
 
 def DeletePerDay(particle,fieldset,time):
+    """ 
+    Function that looks at whether an entire day has passed before deleting particles.
+    This way, the output file timestamps stay consistent
+    """
     time_day_current = time / (60*60*24)    
     time_day_next = (time + fieldset.parcels_dt ) / (60*60*24)
     
@@ -992,6 +999,11 @@ def DeletePerDay(particle,fieldset,time):
             particle.delete()
 
 class PlasticParticle(JITParticle):
+    """
+    plastic particle
+    lot of variables are written as output data. For this project most of them are not used, however.
+    Variables were still written in case they would be used later
+    """
     age = Variable('age', dtype=np.float32, initial=0., to_write=True)
     
     # beached : 0 sea, 1 beached, 2 after non-beach dyn, 3 after beach dyn, 4 please unbeach
@@ -1029,14 +1041,17 @@ def BoundaryCondition(particle, fieldset, time):
         particle.flag_delete = 1
 
 def Ageing(particle, fieldset, time):
-    
+    """
+    Calculate age of particles and the coastal age
+    When particles have a small fraction of their mass left due to the beaching process, flag them for deletion
+    """
     landZone_p = fieldset.landZone[time, particle.depth, particle.lat, particle.lon] 
     
     if (landZone_p > fieldset.landzone_threshold):
         particle.coastalZoneAge += particle.dt
     
     # delete particle when it has 1% mass left in the tau=150 days case
-    if particle.coastalZoneAge > (9.1 * 86400): #691.
+    if particle.coastalZoneAge > (691 * 86400): #691.
         # particle.delete()
         particle.flag_delete = 1
         
